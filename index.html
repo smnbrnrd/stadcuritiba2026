@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STAD — Spatio-Temporal Anomaly Detection in Physics Simulations</title>
+  
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+  <link rel="stylesheet" href="reveal/dist/reset.css">
+  <link rel="stylesheet" href="reveal/dist/reveal.css">
+  <link rel="stylesheet" href="assets/css/reveal-litis-theme.css">
+
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+  <!-- TITLE -->
+  <section class="title-slide" data-background-image="assets/background.jpg" data-background-opacity="0.3">
+    <h1>Deep Learning for Anomaly Detection<br>in Spatio-Temporal Physics Simulations</h1>
+    <div class="author">Marwan Taia · Simon Bernard · Laurent Heutte</div>
+    <div class="institution">LITIS lab., University of Rouen Normandy, France</div>
+    <div>
+        <img src="assets/logos/logo_urn.png" class="logo" alt="logo_urn">
+        <img src="assets/logos/logo_litis.png" class="logo" alt="logo_litis">
+        <img src="assets/logos/logo_anr.png" class="logo" alt="logo_anr">
+    </div>
+    <p>Slides available at <a href="https://smnbrnrd.github.io/">smnbrnrd.github.io/</a>.</p>
+  </section>
+
+  <!-- OUTLINE -->
+  <section>
+    <h2>Outline</h2>
+    <div class="toc-grid">
+      <a class="toc-card" href="#/part-1">
+        <span class="toc-number">01</span>
+        <span class="toc-title">Problem setting</span>
+        <span class="toc-desc">Why spatio-temporal anomalies are hard, and why no shared benchmark exists</span>
+      </a>
+      <a class="toc-card" href="#/part-2">
+        <span class="toc-number">02</span>
+        <span class="toc-title">Benchmark construction</span>
+        <span class="toc-desc">Solved PDEs, anomaly injection as a forcing term, a 3×3×3 factorial design</span>
+      </a>
+      <a class="toc-card" href="#/part-3">
+        <span class="toc-number">03</span>
+        <span class="toc-title">Detectors and evaluation</span>
+        <span class="toc-desc">Memory-guided normality, patch diffusion, neural-operator residuals; two-stage calibration and frame-level metrics</span>
+      </a>
+      <a class="toc-card" href="#/part-4">
+        <span class="toc-number">04</span>
+        <span class="toc-title">Status and results</span>
+        <span class="toc-desc">What is built, qualitative examples, pending quantitative comparison</span>
+      </a>
+      <a class="toc-card" href="#/part-5">
+        <span class="toc-number">05</span>
+        <span class="toc-title">Roadmap and discussion</span>
+        <span class="toc-desc">Limitations, next threads, open questions</span>
+      </a>
+    </div>
+  </section>
+
+<!-- PART 1 -->
+<section class="section-title" id="part-1" data-background-color="#1b2a4a">
+  <h1>Problem setting</h1>
+  <h2>Where and when, not just whether</h2>
+</section>
+
+<!-- MOTIVATION -->
+<section>
+  <h2>Many high-stakes systems are spatio-temporal fields</h2>
+  <div class="box">
+    A spatio-temporal field is a <strong>quantity or phenomenon that varies across both space (location) and time</strong>, assigning a value to each point in a spatial (continuous) domain at a specific moment or interval.
+  </div>
+  <ul style="margin-top:0.8em">
+    <li><strong>Climate and weather:</strong> temperature, precipitation, and wind speed fields</li>
+    <li><strong>Industrial process safety:</strong> temperature and pressure fields in reactors, pipelines, turbines</li>
+    <li><strong>Fluid systems:</strong> flow over wings, in heat exchangers, in microfluidic devices</li>
+  </ul>
+  <div class="media-strip center">
+    <figure>
+      <video src="assets/media/hurricane_helen_2024_nvidia.mp4" autoplay muted loop playsinline controls></video>
+      <figcaption><a href="https://developer.nvidia.com/blog/spotlight-axa-explores-ai-driven-hurricane-risk-assessment-with-nvidia-earth-2/">AI-Driven Hurricane Risk Assessment</a> (NVIDIA, 2025)</figcaption>
+    </figure>
+    <figure>
+      <video src="assets/media/drought_soil_moisture.webm" autoplay muted loop playsinline controls></video>
+      <figcaption><a href="https://hakamshams.github.io/IDE/">Identifying Spatio-Temporal Drivers of Extreme Events</a> (NeurIPS, 2024)</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- DATA TYPES -->
+<section>
+  <h2>Four families of spatio-temporal data</h2>
+  <div class="grid grid-4 families">
+    <div class="family">
+      <div class="schema" data-schema="event" aria-label="Schematic: discrete events in space"></div>
+      <p class="family-name strong">Event</p>
+      <p class="family-desc">Discrete occurrences at a point in space and time</p>
+      <p class="family-ex">earthquakes, crimes, disease cases</p>
+    </div>
+    <div class="family">
+      <div class="schema" data-schema="trajectory" aria-label="Schematic: a path traced by a moving body"></div>
+      <p class="family-name strong">Trajectory</p>
+      <p class="family-desc">The path traced by a moving object through space and time</p>
+      <p class="family-ex">GPS tracks, hurricane paths</p>
+    </div>
+    <div class="family">
+      <div class="schema" data-schema="point" aria-label="Schematic: a continuous field sampled by moving stations"></div>
+      <p class="family-name strong">Point reference</p>
+      <p class="family-desc">A continuous field sampled at moving stations</p>
+      <p class="family-ex">weather balloons, ocean buoys</p>
+    </div>
+    <div class="family is-focus">
+      <div class="schema" data-schema="raster" aria-label="Schematic: a field on a fixed grid at regular times"></div>
+      <p class="family-name highlight">Raster</p>
+      <p class="family-desc"><strong>A field recorded on a fixed grid at regular times</strong></p>
+      <p class="family-ex">satellite imagery, climate fields, video</p>
+    </div>
+  </div>
+  <p class="cite">Atluri et al., <a href="https://dl.acm.org/doi/10.1145/3161602" target="_blank">Spatio-Temporal Data Mining: A Survey of Problems and Methods</a> ACM Computing Surveys (2018).</p>
+</section>
+
+<!-- RASTER -->
+<section>
+  <h2>Raster data is multi-channel video</h2>
+  <p>A raster field is a sequence of $T$ frames, each a fixed grid of $H \times W$ cells, with $C$ channels per cell (not a single intensity):
+    $$X = (X_1, …, X_T), \quad X_t ∈ \mathbb{R}^{C \times H \times W}$$
+  </p>
+  <ul>
+    <li>A cell in a frame, with coordinates $(i,j)$, is a vector in $\mathbb{R}^C$</li>
+    <li>Smooth regions, sharp fronts and coherent structures that deform over time</li>
+    <li>The model must learn this structure before it can flag anything as abnormal</li>
+  </ul>
+  <div class="schema-wide">
+    <div class="schema" data-schema="tensor" aria-label="Schematic: a sequence of matrices, one cell expanded into a vector of C values"></div>
+  </div>
+</section>
+
+<!-- RASTER EXAMPLES -->
+<section>
+  <h2>Raster data in practice : RGB videos vs ST fields</h2>
+  <ul>
+    <li>Most common raster data in the literature are RGB videos</li>
+    <li>RGB videos are a special case of raster data with $C = 3$ channels</li>
+    <li>Spatio-temporal fields can have a variable number of channels, typically between 1 and 10</li>
+  </ul>
+  <div class="media-strip center">
+    <figure>
+      <video autoplay muted loop playsinline aria-label="Normal frames from a video anomaly detection benchmark">
+        <source src="assets/media/shanghaitech_normal_01.webm" type="video/webm">
+      </video>
+      <figcaption>Surveillance video from the <a href="https://svip-lab.github.io/dataset/campus_dataset.html" target="_blank">ShanghaiTech</a> dataset</figcaption>
+    </figure>
+    <figure>
+      <video autoplay muted loop playsinline aria-label="GraphCast weather forecast">
+        <source src="assets/media/graphcast-result.webm" type="video/webm">
+      </video>
+      <figcaption><a href="https://deepmind.google/blog/graphcast-ai-model-for-faster-and-more-accurate-global-weather-forecasting/" target="_blank">GraphCast</a> handle 227 channels (5 surface variables and 6 variables at 37 levels)</figcaption>
+    </figure>
+    <figure>
+      <video autoplay muted loop playsinline aria-label="Navier–Stokes vorticity, clean simulation">
+        <source src="assets/media/ns_sim1_vorticity_clean.webm" type="video/webm">
+      </video>
+      <figcaption>Navier–Stokes simulation with typically 5 variables (here vorticity) </figcaption>
+    </figure>
+  </div>
+  <p style="margin-top:1em">Models designed for RGB videos are rarely straightforwardly applicable to ST fields with $C>3$ channels.</p>
+</section>
+
+<!-- PDE simulations -->
+<section>
+  <h2>What type of data are we dealing with?</h2>
+  <ul>
+    <li>Spatio-temporal data, i.e. that varies in both space and time.</li>
+    <li>Data that comes from physical processes, such as weather patterns, fluid dynamics, or biological systems.</li>
+    <li>Such physical processes are often governed by partial differential equations (PDEs).</li>
+  </ul>
+  <div class="cols align-center" style="margin-top:1.5em">
+    <div class="box">
+      <ul>
+        <li>A <strong>PDE</strong> relates an unknown field $u(\mathbf{x},t)$ to its partial derivatives in space and time:
+            $$\mathcal{G}\big(\mathbf{x},t,u,\partial_t u,\nabla u,\nabla^2 u,\dots\big)=0$$
+        </li>
+        <li>When the time derivative can be isolated, 
+            $$\partial_t u = \mathcal{F}(\mathbf{x},u,\nabla u,\nabla^2 u,\dots)$$ 
+            a <strong>PDE solver</strong> can compute the solution numerically, step by step.
+        </li>
+        <li>The result is a simulation of the physical process.</li>
+      </ul>
+    </div>
+    <figure>
+      <video src="assets/media/rbc_sim1_buoyancy_clean.webm" autoplay muted loop playsinline style="width:65%"></video>
+      <figcaption>Rayleigh-Bénard convection simulation (buoyancy)</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ANOMALY DEFINITION -->
+<section>
+  <h2>What is an anomaly?</h2>
+  <p>An observation that departs from normal behavior: <span class="highlight">rare</span> and usually <span class="highlight">unexpected</span>.</p>
+  <div class="cols" style="margin-top:0.6em">
+    <div class="box"><p><strong>Rare.</strong> A tiny fraction of any stream, so a balanced, representative labeled set can never be collected.</p></div>
+    <div class="box"><p><strong>Open-ended.</strong> There are countless ways to be abnormal; the next one may resemble nothing seen before.</p></div>
+  </div>
+  <figure class="anomaly-figure"  style="margin-top:0.6em">
+    <div class="schema" data-schema="anomaly" aria-label="Schematic time series: a normal oscillation, with a drought, a collective anomaly and a concept drift highlighted in red"></div>
+  </figure>
+  <p>The goal is to model the normal behavior $\mathbf{X} \sim p_\text{norm}$ and detect deviations s.t. $p_\text{norm}(\mathbf{X}) < \tau$.</p>
+  <p class="cite">
+    Blázquez-García et al., <a href="https://dl.acm.org/doi/10.1145/3444690" target="_blank">A Review on Outlier/Anomaly Detection in Time Series Data</a>, ACM Computing Surveys  (2021); <br>
+    Ruff et al., <a href="https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9347460" target="_blank">A Unifying Review of Deep and Shallow Anomaly Detection</a>, Proc. IEEE (2021).
+  </p>
+</section>
+
+<!-- PROBLEM 1: DEFINITIONS -->
+<section>
+  <h2>Problem 1 · “Anomaly” means different things in each dataset</h2>
+  <ul>
+    <li>Additive pixel noise on a handful of pixels</li>
+    <li>A foreign patch pasted onto a normal frame</li>
+    <li>A held-out semantic class declared anomalous</li>
+    <li>A specific real phenomenon, e.g. a drought or a traffic incident</li>
+  </ul>
+  <div class="box warn" style="margin-top:0.7em"><p>These are different tasks. A method that wins on one can lose on another. Because the label is a <em>human convention</em>, reported scores cannot be ranked against each other.</p></div>
+  <div class="media-strip center">
+    <figure>
+      <video src="assets/media/shanghaitech_anomalous_01.webm" autoplay muted loop playsinline></video>
+      <figcaption>ShanghaiTech, anomalous sample 01</figcaption>
+    </figure>
+    <figure>
+      <video src="assets/media/shanghaitech_anomalous_03.webm" autoplay muted loop playsinline></video>
+      <figcaption>ShanghaiTech, anomalous sample 03</figcaption>
+    </figure>
+    <figure>
+      <video src="assets/media/shanghaitech_anomalous_09.webm" autoplay muted loop playsinline></video>
+      <figcaption>ShanghaiTech, anomalous sample 09</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- PROBLEM 2: NO DATA -->
+<section>
+  <h2>Problem 2 · No labeled anomaly benchmark for PDE fields</h2>
+  <div class="cols">
+    <div>
+      <p><strong>Video AD benchmarks</strong></p>
+      <ul>
+        <li>Labels are human conventions</li>
+        <li>Difficulty depends heavily on the type of anomalies</li>
+        <li>Solutions are often domain-specific and not easily transferable</li>
+      </ul>
+    </div>
+    <div>
+      <p><strong>PDE benchmarks (PDEBench, The Well)</strong></p>
+      <ul>
+        <li>Right kind of data (PDE simulations)</li>
+        <li>Large variety of physical scenarios</li>
+        <li><span class="highlight">No anomalies and no masks</span></li></ul>
+    </div>
+  </div>
+  <div class="box" style="margin-top:0.8em">
+    <p><span class="highlight">What we need</span></p>
+    <ul>
+      <li><strong>Realistic (physically motivated)</strong> abnormal behaviors in PDE simulations</li>
+      <li><strong>Controlled</strong> anomalies in a well-defined physical context</li>
+      <li><strong>Well-defined ground truth</strong></li>
+      <li><strong>Parametrable and reproducible</strong> normal/abnormal simulation generation</li>
+    </ul>
+  </div>
+  <p class="cite">
+    Takamoto et al., <a href="https://neurips.cc/virtual/2022/poster/55731" target="_blank">PDEBench: An Extensive Benchmark for Scientific Machine Learning</a>, NeurIPS Datasets and Benchmarks (2022)<br>
+    Ohana et al., <a href="https://arxiv.org/abs/2412.00568" target="_blank">The Well: a Large-Scale Collection of Diverse Physics Simulations for Machine Learning</a>, NeurIPS Datasets and Benchmarks (2024).
+  </p>
+</section>
+
+<!-- SECTION 2 -->
+<section class="section-title" id="part-2" data-background-color="#1b2a4a">
+  <h1>Benchmark construction</h1>
+  <h2>Two solved PDEs, one injected forcing</h2>
+</section>
+
+<!-- KEY IDEA -->
+<section>
+  <h2>Key idea: control the data-generating process</h2>
+  <p>Each simulation is produced by numerically integrating a governing PDE with a spectral solver.</p>
+  <div class="cols" style="margin-top:0.6em">
+    <div class="box"><p><strong>Normal</strong> = the simulation obeys the equation</p><p style="text-align:center">
+      $$ \partial_t\mathbf{u} = \mathcal{F}(\mathbf{u}) $$
+    </div>
+    <div class="box warn"><p><strong>Anomaly</strong> = one extra source term</p><p style="text-align:center">
+      $$ \partial_t\mathbf{u} = \mathcal{F}(\mathbf{u}) + \mathbf{s} $$
+    </div>
+  </div>
+  <p style="margin-top:0.8em">“Normal” becomes precise, and the anomaly is <span class="highlight">grown by the physics</span>, not pasted onto a finished frame.</p>
+  
+  <figure style="margin-top:2em">
+    <video src="assets/media/rbc_sim1_buoyancy_clean_vs_anomalous.webm" autoplay controls muted loop playsinline style="height:15em"></video>
+    <figcaption>Example: anomaly generated by the addition of a localized heat source.</figcaption>
+  </figure>
+</section>
+
+<!-- TWO SYSTEMS -->
+<section>
+  <h2>Two canonical turbulent-flow systems</h2>
+  <div class="cols">
+    <div class="box small">
+      <p><strong>Navier–Stokes, Kolmogorov flow</strong></p>
+      $$
+        \begin{aligned}
+          \partial_t\mathbf{u} + (\mathbf{u}\cdot\nabla)\mathbf{u} &= -\nabla p + \nu\nabla^2\mathbf{u} \textcolor{red}{+ \mathbf{F}(\mathbf{x}, t)}
+        \end{aligned}
+      $$
+      <ul>
+        <li>Adds a localized, time-limited vortex to the flow</li>
+        <li>$\mathbf{F} = e(t)\,\omega_0\,G(\mathbf{x})\,\sigma^{-1}\,(-(y - y_0),\; x - x_0)$, with $e(t)$ a temporal window and $G(\mathbf{x})$ a Gaussian in space</li>
+        <li>4 channels: vorticity, pressure, x-axis and y-axis velocity</li></ul>
+    </div>
+    <div class="box small">
+      <p><strong>Rayleigh–Bénard convection</strong></p>
+      $$
+        \begin{aligned}
+          \partial_t T + (\mathbf{u}\cdot\nabla)T &=\kappa\nabla^2 T \textcolor{red}{+ \mathbf{S}(\mathbf{x}, t)}
+        \end{aligned}
+      $$
+      <ul>
+        <li>Adds a localized, time-limited heat source to the buoyancy equation</li>
+        <li>$\mathbf{S} = e(t)\,q_0\,G(\mathbf{x})$, with $e(t)$ a temporal window and $G(\mathbf{x})$ a Gaussian in space</li>
+        <li>5 channels: buoyancy + the same 4 channels as NS</li>
+      </ul>
+    </div>
+  </div>
+  <p>Both on 128 × 128 grids, solved with Dedalus (spectral), a frame every 0.5 time units, 200 usable frames.</p>
+  <div class="media-strip center">
+    <figure>
+      <video src="assets/media/ns_sim1_vorticity_clean_vs_anomalous.webm" autoplay muted loop playsinline></video>
+      <figcaption>Navier–Stokes, vorticity channel</figcaption>
+    </figure>
+    <figure>
+      <video src="assets/media/rbc_sim1_buoyancy_clean_vs_anomalous.webm" autoplay muted loop playsinline></video>
+      <figcaption>Rayleigh–Bénard convection, buoyancy channel</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- PDE DATA -->
+<section>
+  <h2>Data generation with a spectral solver</h2>
+  <p class="lead">Every simulation is produced by numerically integrating a governing PDE with a spectral solver (<a href="https://dedalus-project.org/" target="_blank">dedalus-project.org</a>).</p>
+  <div style="position:relative;width:70%;height:450px;margin-top:1em;margin-left:3em">
+    <div class="schema" data-schema="pde-solver" aria-label="Schematic: a governing PDE is integrated by a solver step by step, producing a grid of values and a snapshot field" style="position:absolute;left:0;top:0;;width:100%;height:100%"></div>
+    <div style="position:absolute;left:-90px;top:-5px;width:380px;text-align:center;font-size:0.8em">
+      $$
+        \begin{aligned}
+          \partial_t T + (\mathbf{u}\cdot\nabla)T &=\kappa\nabla^2 T
+        \end{aligned}
+      $$
+    </div>
+  </div>
+  <p class="cite">Burns et al., <a href="https://arxiv.org/abs/1905.10388" target="_blank">Dedalus: A flexible framework for numerical simulations with spectral methods</a>, Phys. Rev. Research 2, 023068 (2020).</p>
+</section>
+
+<!-- DATASET GENERATION -->
+<section>
+  <h2>Anomaly Detection Dataset Generation</h2>
+  <p class="lead">We generate the simulation with and without anomaly to obtain ground truth anomaly labels.</p>
+  <div style="position:relative;width:70%;height:450px;margin-top:1em;margin-left:3em">
+    <div class="schema" data-schema="dataset-generation" aria-label="Schematic: an injected anomaly term is added to the governing PDE before the solver, producing a grid of values and a snapshot field" style="position:absolute;left:0;top:0;width:100%;height:100%"></div>
+    <div style="position:absolute;left:-90px;top:-5px;width:380px;text-align:center;font-size:0.8em">
+      $$
+        \begin{aligned}
+          \partial_t T + (\mathbf{u}\cdot\nabla)T &=\kappa\nabla^2 T
+        \end{aligned}
+      $$
+    </div>
+
+    <div style="position:absolute;left:-90px;top:335px;width:380px;text-align:center;font-size:0.8em">
+      $$
+        \begin{aligned}
+          \partial_t T + (\mathbf{u}\cdot\nabla)T &=\kappa\nabla^2 T \textcolor{red}{+ \mathbf{S}(\mathbf{x}, t)} \\
+        \end{aligned}
+      $$
+    </div>
+  </div>
+  <p class="cite">Burns et al., <a href="https://arxiv.org/abs/1905.10388" target="_blank">Dedalus: A flexible framework for numerical simulations with spectral methods</a>, Phys. Rev. Research 2, 023068 (2020).</p>
+</section>
+
+<!-- FACTORIAL BANDS -->
+<section>
+  <h2>Three controllable factors, three levels each</h2>
+  <p>Parameters of the anomaly injection function: amplitude factor, variance of the gaussian kernel, and duration of the injection</p>
+  <figure>
+    <img src="assets/media/pde_difficulty_levels.png" alt="Schematic: a 3×3×3 grid of cells, each representing a combination of low/medium/high intensity, size and duration" style="width:90%">
+  </figure>
+  <p style="margin-top:0.5em">Not a difficulty measurement but an experimental design to explore the robustness of the detection algorithm.</p>
+</section>
+
+<!-- FACTORIAL DESIGN -->
+<section>
+  <h2>One dataset per factor configuration</h2>
+  <div class="cols" style="justify-content:space-around">
+    <div class="box"><div class="big-num">1000</div>normal simulations, shared pool</div>
+    <div class="box"><div class="big-num">27</div>datasets per PDE systems</div>
+    <div class="box"><div class="big-num">200</div>anomalous simulations per dataset</div>
+    <div class="box"><div class="big-num">200</div>frames per simulation (every 0.5 time units)</div>
+  </div>
+  <ul style="margin-top:0.8em">
+    <li>Normal pool split 800 / 100 / 100 (train / validation / test), identical for every cell: one model per physics</li>
+    <li>Anomalous pool split: 100 / 100 (validation / test), mixed with validation and test normal simulations</li>
+    <li><strong>Validation simulations for threshold calibration, test simulations for reporting</strong></li>
+  </ul>
+  <ul style="margin-top: 1.2em;">
+    <li>Campaign: 13,200 solver runs, about 0.29 TB</li>
+    <li>Solver runs are regenerable from recorded seeds, to one float32 ULP</li>
+    <li>Code and datasets to be released upon publication.</li>
+  </ul>
+</section>
+
+<!-- GROUND TRUTH: THREE COMPONENTS -->
+<section>
+  <h2>Ground truth: three components, one used so far</h2>
+  <figure style="margin:0">
+    <div style="display:flex;justify-content:center;gap:24px">
+      <img src="assets/media/rbc_snapshot_clean.png" alt="Clean twin" style="height:170px;width:170px;object-fit:contain">
+      <img src="assets/media/rbc_snapshot_anomaly.png" alt="Anomalous run" style="height:170px;width:170px;object-fit:contain">
+      <img src="assets/media/rbc_snapshot_diff.png" alt="Absolute difference" style="height:170px;width:170px;object-fit:contain">
+    </div>
+    <figcaption class="small" style="text-align:center">1 · Clean twin, anomalous run, |difference| (same seed)</figcaption>
+  </figure>
+  <div class="cols" style="margin-top:0.4em">
+    <figure style="margin:0">
+      <div style="position:relative;width:100%;aspect-ratio:600/200"><div class="schema" data-schema="frame-window" aria-label="Frame annotation: label 1 during the forcing window, 0 otherwise; the aftermath is still perturbed but labelled 0" style="position:absolute;inset:0"></div></div>
+      <figcaption class="small" style="text-align:center"><strong>2 · Forcing window (used so far)</strong></figcaption>
+    </figure>
+    <figure style="margin:0">
+      <div style="position:relative;width:100%;aspect-ratio:600/200"><div class="schema" data-schema="footprint" aria-label="Gaussian footprint of the forcing at one time step, with its 2 sigma mask" style="position:absolute;inset:0"></div></div>
+      <figcaption class="small" style="text-align:center">3 · Spatial mask: Gaussian footprint, σ = √(area / π)</figcaption>
+    </figure>
+  </div>
+  <ul style="margin-top:1em">
+    <li><strong>Used so far: the forcing window (2).</strong> All frames during the forcing are positive, the others negative.</li>
+    <li><strong>Limit i: spatial position is ignored.</strong> The whole frame is labelled.</li>
+    <li><strong>Limit ii: propagation after forcing is ignored.</strong> Anomalous frames are the one concerned by the forcing.</li>
+  </ul>
+</section>
+
+<!-- FRAME & PIXEL LABELS (slide 171) -->
+<section>
+  <h2>Every frame gets a state; so does every pixel (work in progress)</h2>
+  <p>Use of pixel-based tracers, whose propagation is based on the dynamics of partial differential equations.</p>
+  <div style="position:relative;width:90%;aspect-ratio:1700/750"><div class="schema" data-schema="frame-pixel-labels" aria-label="Schematic: one NS run, 200 frames, colored as normal, forced or aftermath, with vorticity and pixel-state snapshots at five times" style="position:absolute;inset:0"></div></div>
+</section>
+
+<!-- SECTION 3 · DETECTORS AND EVALUATION PROTOCOL -->
+<section class="section-title" id="part-3" data-background-color="#1b2a4a">
+  <h1>Detectors and evaluation</h1>
+  <h2>Two families of detectors, one protocol</h2>
+</section>
+
+<!-- DETECTOR OVERVIEW -->
+<section>
+  <h2>Two families, six methods (work in progress)</h2>
+  <div class="cols">
+    <div class="box">
+      <p><strong>Detection family (video AD)</strong></p>
+      <ul>
+        <li><strong>MNAD, prediction</strong> and reconstruction variants</li>
+        <li><strong>MA-PDM</strong> (patch diffusion, state of the art)</li>
+      </ul>
+    </div>
+    <div class="box">
+      <p><strong>Forecasting-residual family</strong></p>
+      <ul>
+        <li><strong>Fourier Neural Operator (FNO)</strong></li>
+        <li>Adaptive FNO</li>
+        <li>SimVP (CNN based)</li>
+        <li>PredFormer (Transformer based)</li>
+      </ul>
+    </div>
+  </div>
+  <p style="margin-top:0.6em">Every model is trained once per physics and evaluated on all 27 cell-specific test sets. Only three of them at the moment are part of the benchmark (the one in bold).</p>
+  <p class="cite">
+    Park et al., <a href="https://openaccess.thecvf.com/content_CVPR_2020/papers/Park_Learning_Memory-Guided_Normality_for_Anomaly_Detection_CVPR_2020_paper.pdf" target="_blank">Learning Memory-guided Normality for Anomaly Detection</a>, CVPR (2020); <br>
+    Zhou et al., <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33169" target="_blank">MA-PDM: Motion-Appearance Patch Diffusion Model for Video Anomaly Detection</a>, AAAI (2025); <br>
+    Li et al., <a href="https://openreview.net/pdf?id=c8P9NQVtmnO" target="_blank">Fourier Neural Operator for Parametric Partial Differential Equations</a>, ICLR (2021); <br>
+    Guibas et al., <a href="https://openreview.net/pdf?id=EXHG-A3jlM" target="_blank">Adaptive Fourier Neural Operator: A Generalized Fourier Neural Operator for Parametric Partial Differential Equations</a>, ICLR (2022); <br>
+    Gao et al., <a href="https://openaccess.thecvf.com/content/CVPR2022/papers/Gao_SimVP_Simpler_Yet_Better_Video_Prediction_CVPR_2022_paper.pdf" target="_blank">SimVP: Simpler Yet Better Video Prediction</a>, CVPR (2022); <br>
+    Tang et al, <a href="https://yyyujintang.github.io/predformer-project/" target="_blank">Video Prediction Transformers without Recurrence or Convolution</a>, TMLR (2026).
+  </p>
+</section>
+
+<!-- MNAD -->
+<section>
+  <h2>MNAD: memory-guided normality</h2>
+  <div style="position:relative;width:100%;aspect-ratio:1740/560"><div class="schema" data-schema="mnad-architecture" aria-label="MNAD architecture: the input is encoded to a query, which reads a memory of normal prototypes; the read is concatenated with the query and decoded into a prediction" style="position:absolute;inset:0"></div></div>
+  <div class="cols" style="margin-top:0.6em">
+    <div class="box"><p>Predict a frame from a memory of normal prototypes, and compare to the observed one</p></div>
+    <div class="box"><p>An anomaly has no prototype → the prediction degrades → it gets flagged</p></div>
+    <div class="box"><p>The learnt memory prevents the model to generalize beyond the normal domain.</p></div>
+  </div>
+  <p class="cite">Park et al., <a href="https://openaccess.thecvf.com/content_CVPR_2020/papers/Park_Learning_Memory-Guided_Normality_for_Anomaly_Detection_CVPR_2020_paper.pdf" target="_blank">Learning Memory-guided Normality for Anomaly Detection</a>, CVPR (2020)</p>
+  <aside class="notes">Motivation : les autoencodeurs généralisent trop bien et reconstruisent aussi les anomalies. La mémoire contraint la reconstruction au répertoire du normal.</aside>
+</section>
+
+<!-- MA-PDM -->
+<section>
+  <h2>MA-PDM: patch diffusion as a forecaster</h2>
+  <div style="position:relative;height:430px;aspect-ratio:1340/690;margin:0 auto"><div class="schema" data-schema="ma-pdm-architecture" aria-label="MA-PDM architecture: past frames give appearance and motion tensors; they are concatenated with a noisy target and denoised by a U-Net that receives skip features and a memory read; the stitched output is the generated frame" style="position:absolute;inset:0"></div></div>
+  <div class="cols" style="margin-top:0.6em">
+    <div class="box"><p>Patch-based appearance and motion encoding</p></div>
+    <div class="box"><p>Diffusion process to generate a future frame</p></div>
+    <div class="box"><p>Anomaly = the gap between that generated future and reality</p></div>
+  </div>
+  <p class="cite">Zhou et al., <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33169" target="_blank">MA-PDM: Motion-Appearance Patch Diffusion Model for Video Anomaly Detection</a>, AAAI (2025)</p>
+</section>
+
+<!-- FNO -->
+<section>
+  <h2>FNO: discretization invariant representation</h2>
+  <ul>
+    <li>Neural Operators are a class of deep learning models designed to learn and approximate the solution of PDEs.</li>
+    <li>Layers operates on <strong>functions</strong>, not on vectors
+    $$v_{t+1, i} = \sigma\Big( \sum_{j=1}^{n} W_{ij}, v_{t,j} + b_i \Big) \quad \text{(regular NN)}$$
+    $$v_{t+1}(\mathbf{x}) = \sigma\Big( \mathbf{W} v_{t}(\mathbf{x}) + \int_{\Omega} \kappa(\mathbf{x}, \mathbf{y}), v_{t}(\mathbf{y}), d\mathbf{y} \Big)\quad \text{(neural operator)}$$
+    where $v_{t}(\mathbf{x})$ is a function defined on a domain $\Omega$ (output of the $t$-th layer) and $\kappa$ is a learnt kernel function.
+    </li>
+    <li>The integral represents a non-local operation that captures the interaction between different points in the domain.</li>
+    <li>Nothing in this formula mentions a grid: <strong>discretization invariant</strong> representation learning</li>
+    <li class="highlight">Fourier Neural Operators (FNO) compute the integral using fast Fourier transforms (FFTs).</li>
+  </ul>
+</section>
+
+<!-- FNO bis -->
+<section>
+  <h2>FNO: discretization invariant representation</h2>
+  <figure>
+    <img src="assets/media/fno.png" style="width:70%" alt="FNO architecture: the input is lifted to a higher dimension, then processed by a series of Fourier layers, and finally projected back to the original dimension to produce the output">
+  </figure>
+   <div class="cols" style="margin-top:0.6em">
+    <div class="box"><p>Natural fit for PDE data, where waves and coherent swirls live in frequency space</p></div>
+    <div class="box"><p>Trained to forecast normal evolution; the per-pixel residual is the anomaly score</p></div>
+  </div>
+</section>
+
+<!-- METRICS AND THRESHOLD SELECTION -->
+<section>
+  <h2>Metrics and threshold selection</h2>
+  <ul>
+    <li>Frame score: spatial maximum of the score map, $s_t = \max_{x,y} s_{t,x,y}$</li>
+    <li>Primary task: timestep-level detection; simulation and pixel levels are secondary diagnostics</li>
+  </ul>
+  <table style="margin-top:1em">
+    <tr><th>Metric</th><th>Role</th><th>Level</th></tr>
+    <tr><td><strong>IoU</strong></td><td>Primary, threshold-free</td><td>simulation</td></tr>
+    <tr><td>F1, precision, recall</td><td>At the calibrated threshold</td><td>frame</td></tr>
+    <tr><td>FPR on normal simulations</td><td>Clean-simulation false alarms, at the calibrated threshold</td><td>simulation / frame</td></tr>
+    <tr><td>Pixel-level IoU</td><td>Localization diagnostic</td><td>pixel</td></tr>
+  </table>
+  <div class="box" style="margin-top:1em"><p><strong>Threshold.</strong> Chosen on the validation split to maximize F1, then frozen and applied to 100 normal and 100 anomalous test simulations disjoint from val. Only these test numbers are cited.</p></div>
+  <p class="small" style="margin-top:0.5em">Frame imbalance: anomalous frames are a few percent of test at Low duration and about a tenth at High duration.</p>
+</section>
+
+<!-- SECTION 4 -->
+<section class="section-title" id="part-4" data-background-color="#1b2a4a">
+  <h1>Results</h1>
+  <h2>Three models, 54 cells, two physics</h2>
+</section>
+
+<!-- STATUS -->
+<section>
+  <h2>Where the work stands</h2>
+  <div class="cols">
+    <div class="box">
+      <p><strong>Done</strong></p>
+      <ul>
+        <li>Twin data generation for NS and RBC, 27 cells each</li>
+        <li>Full evaluation of three detectors: FNO, MNAD, MA-PDM</li>
+        <li>Frame-level metrics on the test split, threshold calibrated on validation</li>
+      </ul>
+    </div>
+    <div class="box warn">
+      <p><strong>Open</strong></p>
+      <ul>
+        <li>Other baselines: training and evaluation in progress, not presented here</li>
+        <li>Pixel-level IoU: definition of the threshold rule pending</li>
+        <li>Ground truth beyond the forcing frames: tracer-based refinement in progress</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">Les autres baselines sont en cours d'entraînement ou d'évaluation, sans résultats : ne pas les montrer. Les résultats présentés ensuite sont ceux de la campagne de Marwan Taia.</aside>
+</section>
+
+<!-- RBC EXAMPLE -->
+<section>
+  <h2>Global results on Rayleigh–Bénard</h2>
+  <p><strong>Mean over all 27 configurations:</strong></p>
+  <table>
+    <tr><th>Model</th><th>IoU</th><th>F1</th></tr>
+    <tr><td>FNO</td><td><strong>0.409</strong></td><td><strong>0.558</strong></td></tr>
+    <tr><td>MNAD</td><td>0.354</td><td>0.508</td></tr>
+    <tr><td>MA-PDM</td><td>0.330</td><td>0.476</td></tr>
+  </table>
+  <p><strong>False alarms on normal and anomalous runs:</strong></p>
+  <table>
+    <tr><th>Model</th><th>Normal runs</th><th>Anomalous runs, outside label</th></tr>
+    <tr><td>FNO</td><td>0.1 %</td><td>13.5 %</td></tr>
+    <tr><td>MNAD</td><td>0.1 %</td><td>13.0 %</td></tr>
+    <tr><td>MA-PDM</td><td>0.3 %</td><td>13.4 %</td></tr>
+  </table>
+  <div class="box" style="margin-top:1.5em">
+    <ul>
+      <li>FNO has the best metrics, but is the difference significant?</li>
+      <li>Normal runs almost never alarm</li>
+    </ul>
+  </div>
+</section>
+
+<!-- RBC EXAMPLE bis -->
+<section>
+  <h2>Qualitative example</h2>
+  <video src="assets/media/rbc_qualiresults.mp4" controls muted loop playsinline style="display:block;width:80%;max-height:80%;object-fit:contain;margin:0 auto"></video>
+  <p style="margin-top:1em; text-align: center;">MNAD react first but stay high after it; FNO tracks the window, then drops</p>
+</section>
+
+<!-- NS EXAMPLE -->
+<section>
+  <h2>Global results on Navier–Stokes</h2>
+  <p><strong>Mean over all 27 configurations:</strong></p>
+  <table>
+    <tr><th>Model</th><th>IoU</th><th>F1</th></tr>
+    <tr><td>FNO</td><td><strong>0.602</strong></td><td><strong>0.656</strong></td></tr>
+    <tr><td>MNAD</td><td>0.184</td><td>0.222</td></tr>
+    <tr><td>MA-PDM</td><td>0.155</td><td>0.199</td></tr>
+  </table>
+  <p><strong>False alarms on normal and anomalous runs:</strong></p>
+  <table>
+    <tr><th>Model</th><th>Normal runs</th><th>Anomalous runs, outside label</th></tr>
+    <tr><td>FNO</td><td>2.2 %</td><td>12.4 %</td></tr>
+    <tr><td>MNAD</td><td>22.4 %</td><td>29.4 %</td></tr>
+    <tr><td>MA-PDM</td><td>25.8 %</td><td>39.4 %</td></tr>
+  </table>
+  <div class="box" style="margin-top:1.5em">
+    <ul>
+      <li>FNO is a clear leader this time</li>
+      <li>MNAD and MA-PDM alarm on about a quarter of normal frames</li>
+    </ul>
+  </div>
+</section>
+
+<!-- NS EXAMPLE bis -->
+<section>
+  <h2>Qualitative example</h2>
+  <video src="assets/media/ns_qualiresults.mp4" controls muted loop playsinline style="display:block;width:80%;max-height:80%;object-fit:contain;margin:0 auto"></video>
+  <p style="margin-top:1em; text-align: center;">FNO fires as the vortex appears and nowhere else; MNAD and MA-PDM peak before and after</p>
+</section>
+
+<!-- RESULTS BY CELL -->
+<section>
+  <h2>Results w.r.t to the configuration</h2>
+  <p><strong>IoU along one factor, the other two at medium · levels low / medium / high:</strong></p>
+  <table>
+    <tr><th rowspan="2">Factor</th><th colspan="3">FNO</th><th colspan="3">MNAD</th><th colspan="3">MA-PDM</th></tr>
+    <tr><th>RBC</th><th>NS</th><th>&nbsp;</th><th>RBC</th><th>NS</th><th>&nbsp;</th><th>RBC</th><th>NS</th><th>&nbsp;</th></tr>
+    <tr><td>Intensity</td><td>0.32 / 0.42 / 0.46</td><td>0.49 / 0.73 / 0.62</td><td></td><td>0.30 / 0.40 / 0.40</td><td>0.11 / 0.15 / 0.20</td><td></td><td>0.28 / 0.39 / 0.41</td><td>0.13 / 0.11 / 0.15</td><td></td></tr>
+    <tr><td>Duration</td><td>0.26 / 0.42 / 0.50</td><td>0.61 / 0.73 / 0.69</td><td></td><td>0.22 / 0.40 / 0.49</td><td>0.08 / 0.15 / 0.30</td><td></td><td>0.22 / 0.39 / 0.50</td><td>0.07 / 0.11 / 0.24</td><td></td></tr>
+    <tr><td>Size</td><td>0.54 / 0.42 / 0.36</td><td>0.85 / 0.73 / 0.46</td><td></td><td>0.41 / 0.40 / 0.33</td><td>0.13 / 0.15 / 0.18</td><td></td><td>0.40 / 0.39 / 0.33</td><td>0.14 / 0.11 / 0.11</td><td></td></tr></table>
+  <div class="box" style="margin-top:0.5em">
+    <ul>
+      <li>RBC: IoU falls as anomalies get larger, for all three models (FNO 0.52 → 0.32)</li>
+      <li>NS: FNO falls with size (0.80 → 0.42) while MNAD rises slightly (0.18 → 0.20)</li>
+      <li>Longer anomalies raise IoU for every model, most strongly for MNAD in NS (0.09 → 0.31)</li>
+    </ul>
+  </div>
+  <p style="margin-top:1.5em"><strong>Mean over the three intensity levels (results not shown for clarity concerns):</strong></p>
+  <div class="box">
+    <ul>
+      <li>Every model is best on long anomalies</li>
+      <li>RBC: the easiest is small and long, the hardest is large and short.</li>
+      <li>NS: FNO is best on small anomalies; the other two models do best on large ones, though only slightly.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 35 · F1 -->
+<section>
+  <h2>F1 score</h2>
+  <p><strong>Frame level, threshold calibrated on validation:</strong></p>
+  <table>
+    <tr><th>Model</th><th>F1 · NS</th><th>F1 · RBC</th><th>Configurations where best · NS</th><th>Configurations where best · RBC</th></tr>
+    <tr><td>FNO2d</td><td>0.656</td><td>0.558</td><td>26 / 27</td><td>22 / 27</td></tr>
+    <tr><td>MNAD-pred</td><td>0.222</td><td>0.508</td><td>1 / 27</td><td>5 / 27</td></tr>
+    <tr><td>MA-PDM</td><td>0.199</td><td>0.476</td><td>0 / 27</td><td>0 / 27</td></tr>
+  </table>
+  <div class="box" style="margin-top:0.5em">
+    <p>Pairwise F1 gap, FNO minus MNAD: +0.434 in NS (26/27 configurations), +0.050 in RBC (22/27).</p>
+  </div>
+  <p style="margin-top:1.5em"><strong>Pairwise comparison across configurations:</strong></p>
+  <table>
+    <tr><th>Comparison</th><th>RBC · mean gap</th><th>RBC · configurations won</th><th>NS · mean gap</th><th>NS · configurations won</th></tr>
+    <tr><td>FNO2d − MNAD-pred</td><td>+0.055</td><td>22 / 27</td><td>+0.418</td><td>27 / 27</td></tr>
+    <tr><td>FNO2d − MA-PDM</td><td>+0.080</td><td>24 / 27</td><td>+0.447</td><td>27 / 27</td></tr>
+    <tr><td>MNAD-pred − MA-PDM</td><td>+0.024</td><td>19 / 27</td><td>+0.029</td><td>19 / 27</td></tr>
+  </table>
+  <div class="box" style="margin-top:0.5em">
+    <p>Wilcoxon signed-rank test over the 27 configurations: every pairwise gap is significant at p &lt; 0.001 in both physics.</p>
+  </div>
+</section>
+
+<!-- SECTION 5 -->
+<section class="section-title" id="part-5" data-background-color="#1b2a4a">
+  <h1>Roadmap and discussion</h1>
+  <h2>Limitations, next threads, open questions</h2>
+</section>
+
+<!-- 40 · ROADMAP -->
+<section>
+  <h2>Roadmap</h2>
+  <table style="font-size:0.9em">
+    <tr><th>Thread</th><th>Status</th><th>Planned</th></tr>
+    <tr><td>Release the benchmark suite (frozen splits, configs)</td><td>≈ 90 %</td><td>upon publication</td></tr>
+    <tr><td>Open STAD framework (generation, models, evaluation)</td><td>≈ 70 %</td><td>upon publication</td></tr>
+    <tr><td>Natively spectral detector (beyond repurposed FNO forecasters)</td><td>≈ 35 %</td><td>Q1 2027</td></tr>
+    <tr><td>Extension to climate fields (CAM-simulated, injected physical events)</td><td>≈ 15 %</td><td>?</td></tr>
+  </table>
+</section>
+
+<!-- CONCLUSION -->
+<section>
+  <h2>Take-home message</h2>
+  <div class="cols">
+    <div class="box"><p><strong>Controlled labels.</strong> Per-frame and per-pixel ground truth, physically consistent</p></div>
+    <div class="box"><p><strong>Controlled difficulty.</strong> A full factorial over intensity, size and duration</p></div>
+  </div>
+  <div class="cols" style="margin-top:0.5em">
+    <div class="box"><p><strong>Fair protocol.</strong> Normal-only training, calibrate-then-report, no point adjustment</p></div>
+    <div class="box"><p><strong>Reproducible.</strong> Regenerable from seeds, released with code</p></div>
+  </div>
+  <div class="box">
+    <p><strong>Limitations and scope</strong></p>
+    <ul>
+      <li>Ground truth annotated on forcing frames only; the aftermath is still counted as normal (work in progress)</li>
+      <li>Three detectors reported; the other baselines are still running</li>
+      <li>Two-dimensional domains only while many real-world phenomena are three-dimensional</li>
+      <li>One anomaly mechanism per physics (body force for NS, heat source for RBC)</li>
+      <li>Fixed PDE parameters: no transfer across physical regimes yet</li>
+      <li>Detection delay (onset to first flagged frame) is not measured</li>
+    </ul>
+  </div>
+</section>
+
+<!-- QUESTIONS -->
+<section data-background-color="#1b2a4a">
+  <h1 style="color:#fff">Questions</h1>
+  <p style="color:#cfe3e3; margin-top:1em">Marwan Taia · Laurent Heutte · Simon Bernard<br>LITIS Laboratory, Université de Rouen Normandie</p>
+  <aside class="notes">Remercier. Si la question porte sur un résultat non encore calculé, répondre que la protocole est fixé et que le calcul est en cours.</aside>
+</section>
+
+</div>
+</div>
+
+<script src="reveal/dist/reveal.js"></script>
+<script src="reveal/plugin/notes/notes.js"></script>
+<script src="reveal/plugin/reveald3.js"></script>
+<script src="reveal/plugin/math/math.js"></script>
+<script src="reveal/plugin/zoom/zoom.js"></script>
+<script src="assets/js/reveal-litis-utils.js"></script>
+<script src="assets/js/schemas/core.js"></script>
+<script src="assets/js/schemas/data-types.js"></script>
+<script src="assets/js/schemas/raster-tensor.js"></script>
+<script src="assets/js/schemas/anomaly.js"></script>
+<script src="assets/js/schemas/pde-solver.js"></script>
+<script src="assets/js/schemas/dataset-generation.js"></script>
+<script src="assets/js/schemas/frame-window.js"></script>
+<script src="assets/js/schemas/footprint.js"></script>
+<script src="assets/js/schemas/frame-pixel-labels.js"></script>
+<script src="assets/js/schemas/mnad-architecture.js"></script>
+<script src="assets/js/schemas/ma-pdm-architecture.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1300, height: 800,
+    center: false,
+    hash: true, 
+    controls: false,
+    slideNumber: false,
+    mouseWheel: true, 
+    transition: 'none', 
+    progress: true, 
+    autoPlayMedia: true,
+    plugins: [ RevealNotes, Reveald3, RevealZoom, RevealMath.KaTeX ]
+  });
+
+  // Footer configuration (edit as needed)
+  const footerConfig = {
+    text: 'Deep Learning for Anomaly Detection in Spatio-Temporal Physics Simulations', // Text to display
+    showTotalSlides: true // true for "2 / 10", false for "2"
+  };
+
+  // Build and manage the footer automatically
+  Reveal.on('ready', () => {
+    buildFooter(footerConfig.text, footerConfig.showTotalSlides);
+  });
+</script>
+
+</body>
+</html>

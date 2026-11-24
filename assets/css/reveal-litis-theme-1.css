@@ -1,0 +1,606 @@
+/*************************************************************
+ * reveal-litis-theme.css — LITIS theme (merged with the layout rules)
+ *************************************************************/
+
+@import url('fonts.css');
+@import url('fonts/fontawesome/css/font-awesome.css');
+
+/*************************************
+* CSS VARIABLES
+*************************************/
+:root {
+    /* blue palette */
+    --bluepalette-color1: #2f6690;
+    --bluepalette-color2: #3a7ca5;
+    --bluepalette-color3: #d9dcd6;
+    --bluepalette-color4: #16425b;
+    --bluepalette-color5: #778da9;
+
+    --light: #f8f9fa;
+    --dark-green: #2a9d8f;
+    --dark-blue: #366986;
+    --dark-red: #b92d38;
+    --teal: #20c997;
+    --orange: #fd7e14;
+
+    --primary-color: var(--bluepalette-color1);
+    --secondary-color: var(--bluepalette-color3);
+    --link-color: var(--bluepalette-color5);
+    --caption-color: var(--bluepalette-color3);
+    --math-color: var(--bluepalette-color2);
+    --important-color: var(--bluepalette-color2);
+    --warning-color: var(--orange);
+    --danger-color: var(--dark-red);
+    --success-color: var(--dark-green);
+    --info-color: var(--dark-blue);
+    --caption-color: grey;
+    --rule-color: var(--bluepalette-color5);
+    --card-bg: var(--light);
+    --card-accent: var(--bluepalette-color2);
+    --card-warn: var(--orange);
+    --table-head: var(--bluepalette-color4);
+    --table-line: var(--bluepalette-color3);
+
+    --progress-bar-height: 0.3em;
+    
+    /* Spacing unit: every margin in the deck is a multiple of --unit */
+    --unit: 0.5em;
+    --space-xs: calc(var(--unit) * 0.5);   /* 0.25em */
+    --space-s:  var(--unit);               /* 0.5em  */
+    --space-m:  calc(var(--unit) * 2);     /* 1em    */
+    --space-l:  calc(var(--unit) * 3);     /* 1.5em  */
+    --space-xl: calc(var(--unit) * 4.5);   /* 2.25em */
+
+    /* Safe area: nothing may sit under the fixed footer */
+    --safe-top: 0.8em;
+    --safe-bottom: 3.4em;                  /* footer + margin */
+    --safe-x: 1.2em;
+
+    --col-gap: var(--space-l);
+    --radius: 6px;
+}
+
+
+/*************************************
+* RESET STYLES
+*************************************/
+.reveal .slides,
+.reveal figure,
+.reveal h1, 
+.reveal h2,
+.reveal ul,
+.reveal p 
+{
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/*********************************************
+* REVEAL THEMING
+*********************************************/
+.reveal {
+    text-align: left;
+    font-family: "Fira Sans", "PT Sans", Calibri, Tahoma, sans-serif;
+    line-height: 1.5;
+    font-size: 16pt;
+    font-weight: 300;
+}
+
+/************************************************************************************
+ * Layout: content alignment and centering ******************************************/
+
+/* Common content area. Reveal positions and hides sections itself
+   (position: absolute; display: none unless presented), so this rule
+   sets only spacing and alignment: never position or height. */
+.reveal .slides section {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--safe-top) var(--safe-x) var(--safe-bottom);
+  text-align: left;
+}
+
+/* Title slide: content centered horizontally AND vertically */
+.reveal .slides section.title-slide,
+.reveal .slides section.section-title {
+  display: flex !important;
+  height: 100%;   /* fill the slide so the flex centering has room */
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+/************************************************************************************
+* Footer ****************************************************************************/
+
+.reveal .slide-number {
+    font-size: 1em;
+    margin: 0.2rem;
+    color: var(--primary-color);
+    background-color: transparent;
+}
+.reveal .slide-number a { text-decoration: none; }
+.reveal:has(.slides section.title-slide.present) .slide-number {
+    display: none !important;
+}
+.reveal .progress {
+    background: var(--secondary-color);
+    color: var(--primary-color);
+    height: var(--progress-bar-height);
+}
+.custom-footer {
+    position: fixed;
+    bottom: var(--progress-bar-height);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 30;
+    width: 100%;
+    font-size: 0.9em;
+    padding: 0.2em 0;
+    pointer-events: none;
+    color: var(--secondary-color);
+    background-color: var(--primary-color);
+    box-shadow: rgba(0, 0, 0, 0.24) 0px -3px 8px; 
+}
+.custom-footer-left {
+  padding-left: 1em;
+}
+.custom-footer-right { 
+  padding-right: 1em;
+}
+.custom-footer.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/************************************************************************************
+ * Table of contents ****************************************************************/
+
+/* Outline as a grid of cards; each card links to the divider of its part */
+.reveal .slides section .toc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-m);
+  margin-top: var(--space-s);
+}
+.reveal .slides section a.toc-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-m);
+  background: var(--card-bg);
+  border: 1px solid var(--table-line);
+  border-top: 4px solid var(--card-accent);
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.reveal .slides section a.toc-card:hover,
+.reveal .slides section a.toc-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(22, 66, 91, 0.15);
+  outline: none;
+  text-decoration: none;
+}
+.reveal .slides section .toc-number {
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--card-accent);
+}
+.reveal .slides section .toc-title {
+  font-size: 1.15em;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--primary-color);
+}
+.reveal .slides section .toc-desc {
+  font-size: 0.75em;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/************************************************************************************
+ * Titles and headings **************************************************************/
+
+ /* Title slide: h1, author, institution, logo */
+ .reveal .slides section.title-slide h1 {
+    font-size: 2em;
+    color: var(--primary-color);
+    margin-bottom: 1em;
+    font-weight: normal;
+}
+.reveal .slides section.title-slide .author {
+    font-size: 1.2em;
+    margin-bottom: 0.2rem;
+}
+.reveal .slides section.title-slide .institution {
+    font-size: 1em;
+}
+.reveal .slides section.title-slide img.logo {
+    height: 2em;
+    margin: 1.5em 0.5em;
+}
+
+/* Slide title (h2): size and weight come from the theme */
+.reveal .slides section h2 {
+  font-size: 1.5em;
+  font-weight: 500;
+  margin: 0 0 var(--space-l);
+  color: var(--primary-color);
+  width: 100%;
+}
+
+/* Sub-headings inside a slide */
+.reveal .slides section h3 {
+  font-size: 1.15em;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin: var(--space-m) 0 var(--space-s);
+}
+
+/* Section dividers: the background comes from data-background-color,
+   so the text must be light to stay readable on it */
+.reveal .slides section.section-title h1 {
+  font-size: 1.9em;
+  line-height: 1.15;
+  font-weight: 500;
+  color: #fff;
+  margin: 0 0 var(--space-m);
+}
+.reveal .slides section.section-title h2 {
+  font-size: 1.1em;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.85);
+  margin: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+
+/*******************************************************************
+ * COLUMNS AND GRID LAYOUTS
+ *    Two families:
+ *    - .cols : flexbox, equal-width or simple-ratio columns
+ *    - .grid : CSS grid, explicit rows and columns
+ *******************************************************************/
+
+/* Columns (flexbox) */
+.reveal .slides section .cols {
+  display: flex;
+  gap: var(--col-gap);
+  align-items: flex-start;
+  margin-bottom: var(--space-s);
+}
+.reveal .slides section .cols > * {
+  flex: 1 1 0;
+  min-width: 0;                          /* prevents tables and images from overflowing */
+}
+.reveal .slides section .cols.ratio-2-1 > :first-child { flex: 2 1 0; }
+.reveal .slides section .cols.ratio-1-2 > :last-child  { flex: 2 1 0; }
+.reveal .slides section .cols.ratio-1-3 > :first-child { flex: 1 1 0; }
+.reveal .slides section .cols.ratio-3-1 > :first-child { flex: 3 1 0; }
+.reveal .slides section .cols.align-center { align-items: center; }
+.reveal .slides section .cols.align-stretch { align-items: stretch; }
+.reveal .slides section .cols.gap-s { gap: var(--space-s); }
+.reveal .slides section .cols.gap-l { gap: var(--space-xl); }
+
+/* Data families: four cards, each with a schematic drawn by data-schemas.js */
+.reveal .slides section .families {
+  align-items: stretch;
+}
+.reveal .slides section .family {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-s) var(--space-s) var(--space-m);
+  background: var(--card-bg);
+  border: 1px solid var(--table-line);
+  border-top: 4px solid var(--card-accent);
+  border-radius: var(--radius);
+}
+.reveal .slides section .family.is-focus {
+  border-top-color: var(--card-warn);
+  background: #e6f2f2;
+}
+.reveal .slides section .family .schema-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: var(--space-xs);
+}
+.reveal .slides section .family-name {
+  font-size: 1.05em;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-top: var(--space-xs);
+}
+.reveal .slides section .family-desc {
+  font-size: 0.7em;
+  line-height: 1.35;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+}
+.reveal .slides section .family-ex {
+  font-size: 0.65em;
+  font-style: italic;
+  color: var(--text-muted);
+  margin-top: auto;
+  padding-top: var(--space-xs);
+}
+
+/* Wide schematic placed under the text: full width, fixed height */
+.reveal .slides section .schema-wide {
+  margin-top: var(--space-s);
+  text-align: center;
+}
+.reveal .slides section .schema-wide .schema-svg {
+  display: inline-block;
+  height: 300px;
+  width: auto;
+  max-width: 100%;
+}
+
+/* Example videos in a 2 × 2 grid */
+.reveal .slides section .examples .figure {
+  margin: 0;
+}
+.reveal .slides section .examples video {
+  display: block;
+  width: 100%;
+  height: 250px;
+  object-fit: contain;
+  border-radius: var(--radius);
+}
+.reveal .slides section .examples figcaption {
+  font-size: 0.6em;
+  margin-top: var(--space-xs);
+}
+
+/* Anomaly illustration (SVG drawn by data-schemas.js) */
+.reveal .slides section .anomaly-figure {
+  margin: var(--space-s) 0 0;
+  text-align: center;
+}
+.reveal .slides section .anomaly-figure .schema-svg {
+  display: inline-block;
+  height: 260px;
+  width: auto;
+  max-width: 100%;
+}
+
+/* Vertical divider between two columns */
+.reveal .slides section .cols.divided > :not(:last-child) {
+  border-right: 1px solid var(--table-line);
+  padding-right: var(--col-gap);
+}
+
+/* Grids (CSS grid) */
+.reveal .slides section .grid {
+  display: grid;
+  gap: var(--col-gap);
+  align-items: start;
+  margin-bottom: var(--space-s);
+}
+.reveal .slides section .grid > * { min-width: 0; }
+.reveal .slides section .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.reveal .slides section .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.reveal .slides section .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.reveal .slides section .grid-2x2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto auto;
+}
+.reveal .slides section .grid-2-1 { grid-template-columns: 2fr 1fr; }
+.reveal .slides section .grid-1-2 { grid-template-columns: 1fr 2fr; }
+.reveal .slides section .grid-stretch { align-items: stretch; }
+.reveal .slides section .grid-center  { align-items: center; }
+.reveal .slides section .grid-gap-s   { gap: var(--space-s); }
+
+/* Items spanning several columns or rows */
+.reveal .slides section .span-2 { grid-column: span 2; }
+.reveal .slides section .span-3 { grid-column: span 3; }
+.reveal .slides section .span-full { grid-column: 1 / -1; }
+.reveal .slides section .row-span-2 { grid-row: span 2; }
+
+
+/* Strip of animations along the bottom of a slide: fixed height, cropped
+   to fit so the strip never pushes content under the footer */
+.reveal .slides section .media-strip {
+  display: flex;
+  gap: var(--col-gap);
+  /*align-items: stretch;*/
+  margin-top: var(--space-m);
+  align-items: end;
+}
+.reveal .slides section .media-strip.center { justify-content: center; }
+/*.reveal .slides section .media-strip > * {
+  flex: 1 1 0;
+  min-width: 0;
+}*/
+
+.reveal .slides section .media-strip img,
+.reveal .slides section .media-strip video {
+  display: block;
+  width: 100%;
+  height: 10em;
+  object-fit: contain;
+  border-radius: var(--radius);
+}
+.reveal .slides section .media-strip.big img,
+.reveal .slides section .media-strip.big video {
+  height: 20em;
+}
+
+/*********************************************
+* GLOBAL STYLES
+*********************************************/
+
+/* Body text */
+.reveal .slides section p {
+  margin: 0 0 var(--space-s);
+  line-height: 1.4;
+}
+.reveal .slides section .small {         /* secondary detail */
+  font-size: 0.75em;
+  color: var(--text-muted);
+}
+.reveal .slides section strong { font-weight: 500; }
+.reveal .slides section .cite {          /* sources, placed just above the footer */
+  display: block;
+  margin-top: var(--space-m);
+  font-size: 0.6em;
+  color: var(--text-muted);
+}
+.reveal .slides section a {
+  color: var(--link-color);
+  text-decoration: none;
+  font-weight: 400;
+}
+.reveal .slides section a:hover,
+.reveal .slides section a:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+/* Lists */
+.reveal .slides section ul,
+.reveal .slides section ol {
+  margin: 0 0 var(--space-s);
+  padding-left: 1.1em;
+}
+.reveal .slides section li {
+  margin: 0 0 var(--space-xs);
+  line-height: 1.35;
+}
+.reveal .slides section li::marker {
+  color: var(--rule-color);
+}
+.reveal .slides section li > ul,
+.reveal .slides section li > ol {
+  margin-top: var(--space-xs);
+  font-size: 0.9em;
+}
+/* Compact list (many items on one slide) */
+.reveal .slides section ul.compact li { margin-bottom: 0.15em; }
+/* List without bullets (e.g. checklists, blocks instead of bullets) */
+.reveal .slides section ul.plain { list-style: none; padding-left: 0; }
+
+
+/* Box / card */
+.reveal .slides section .box {
+  background: var(--card-bg);
+  border: 1px solid var(--table-line);
+  border-left: 5px solid var(--card-accent);
+  border-radius: var(--radius);
+  padding: var(--space-s) var(--space-m);
+  text-align: left;
+}
+.reveal .slides section .box > :last-child { margin-bottom: 0; }
+.reveal .slides section .box.warn { border-left-color: var(--card-warn); }
+.reveal .slides section .box.success { border-left-color: var(--success-color); }
+
+/* Math */
+.reveal .slides section .katex { 
+    color: var(--math-color); 
+    font-size: 1.2em;
+}
+
+/* Emphasis */
+.reveal .slides section .highlight { color: var(--important-color); font-weight: 600; }
+.reveal .slides section .tbd { color: var(--card-warn); font-weight: 600; }
+
+/* Tables */
+.reveal .slides section table {
+  border-collapse: collapse;
+  margin: 0 auto var(--space-s);
+  font-size: 0.7em;
+  width: auto;
+  max-width: 100%;
+}
+.reveal .slides section th {
+  background: var(--table-head);
+  color: #fff;
+  font-weight: 500;
+  text-align: left;
+  padding: 0.35em 0.7em;
+}
+.reveal .slides section td {
+  padding: 0.3em 0.7em;
+  border-bottom: 1px solid var(--table-line);
+  vertical-align: top;
+}
+.reveal .slides section table.full { width: 100%; }
+.reveal .slides section table.compact { font-size: 0.6em; }
+
+/* Image and figure */
+.reveal .slides section img.framed, 
+.reveal .slides section video.framed {
+  border: 1px solid var(--table-line);
+  border-radius: var(--radius);
+}
+.reveal .slides section .figure {
+  text-align: center;
+  margin: var(--space-s) 0;
+}
+.reveal .slides section .figure img {
+  max-width: 100%;
+  max-height: 480px;                     /* about 60% of the usable height at 800px */
+  width: auto;
+  border-radius: var(--radius);
+}
+.reveal .slides section .figure figcaption {
+  font-size: 0.6em;
+  color: var(--caption-color);
+  margin-top: var(--space-xs);
+}
+
+/* Placeholder to fill in (missing figure or result) */
+.reveal .slides section .todo {
+  border: 3px dashed var(--card-warn);
+  border-radius: 10px;
+  background: #fff8f0;
+  color: var(--card-warn);
+  font-size: 0.75em;
+  text-align: center;
+  padding: var(--space-m);
+  min-height: 6em;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.reveal .slides section .todo strong { font-size: 1.2em; letter-spacing: 0.04em; }
+
+/* Key figures */
+.reveal .slides section .stats {
+  display: flex;
+  justify-content: space-around;
+  gap: var(--space-m);
+  margin: var(--space-m) 0;
+}
+.reveal .slides section .stat { text-align: center; flex: 1 1 0; }
+.reveal .slides section .stat .value {
+  display: block;
+  font-size: 1.8em;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--important-color);
+}
+.reveal .slides section .stat .label {
+  display: block;
+  font-size: 0.5em;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+}
+
+
+/*******************************************************************
+ * 5. AJUSTEMENTS REVEAL
+ *******************************************************************/
+/* Images and videos stay inside the usable area */
+.reveal .slides section img,
+.reveal .slides section video {
+  max-width: 100%;
+}
